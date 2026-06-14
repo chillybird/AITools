@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI工具箱</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; }
+.header { background: #16213e; padding: 16px 28px; border-bottom: 2px solid #0f3460; display: flex; align-items: center; gap: 12px; }
+.header h1 { font-size: 22px; color: #e94560; }
+.header span { font-size: 12px; color: #666; }
+.main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+.toolbar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+.btn { padding: 8px 18px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; }
+.btn-primary { background: #e94560; color: #fff; }
+.btn-primary:hover { background: #d63851; }
+.btn-outline { background: transparent; border: 1px solid #533483; color: #e0e0e0; }
+.btn-outline:hover { background: #533483; }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+.card { background: #16213e; border: 1px solid #0f3460; border-radius: 10px; padding: 20px; transition: border-color 0.2s; }
+.card:hover { border-color: #533483; }
+.card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+.card-title { font-size: 17px; font-weight: bold; color: #e94560; }
+.card-desc { font-size: 13px; color: #aaa; line-height: 1.6; margin-bottom: 14px; }
+.features { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.feature-badge { padding: 3px 10px; border-radius: 4px; font-size: 11px; background: #0f3460; color: #ccc; }
+.app-path { font-size: 11px; color: #555; margin-bottom: 12px; word-break: break-all; }
+.card-footer { display: flex; gap: 8px; align-items: center; }
+.status { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; }
+.status-running { color: #27ae60; }
+.status-running .status-dot { background: #27ae60; }
+.status-stopped { color: #888; }
+.status-stopped .status-dot { background: #555; }
+.status-broken { color: #e74c3c; }
+.status-broken .status-dot { background: #e74c3c; }
+.card-broken { border-color: #e74c3c; opacity: 0.75; }
+.empty { text-align: center; color: #555; padding: 60px; font-size: 15px; }
+.add-card { border: 2px dashed #0f3460; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 180px; cursor: pointer; }
+.add-card:hover { border-color: #e94560; }
+.add-card span { font-size: 14px; color: #666; margin-top: 8px; }
+.add-card .plus { font-size: 36px; color: #533483; }
+.modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 100; align-items: center; justify-content: center; }
+.modal.show { display: flex; }
+.modal-box { background: #16213e; border-radius: 12px; padding: 28px; width: 90%; max-width: 550px; border: 1px solid #0f3460; }
+.modal-box h2 { font-size: 18px; color: #e94560; margin-bottom: 18px; }
+.modal-box label { font-size: 13px; color: #aaa; display: block; margin: 10px 0 4px; }
+.modal-box input, .modal-box textarea { width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #533483; background: #1a1a2e; color: #e0e0e0; font-size: 13px; font-family: inherit; }
+.modal-box textarea { resize: vertical; min-height: 60px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🧰 AI 工具箱</h1>
+  <span>管理 AI 生成的应用</span>
+  <span style="flex:1;"></span>
+  <button class="btn btn-outline btn-sm" onclick="location.reload()">🔄 刷新</button>
+</div>
+
+<div class="main">
+  <div class="card-grid" id="appGrid"></div>
+  <div class="empty" id="emptyHint">暂无应用，点击右侧空白卡片添加</div>
+</div>
+
+<!-- 添加应用 Modal -->
+<div class="modal" id="addModal">
+  <div class="modal-box">
+    <h2>注册新应用</h2>
+    <label>应用 ID (英文标识)</label>
+    <input type="text" id="addId" placeholder="my-tool">
+    <label>应用名称</label>
+    <input type="text" id="addName" placeholder="我的工具">
+    <label>描述</label>
+    <textarea id="addDesc" placeholder="简要描述应用功能..."></textarea>
+    <label>功能列表 (逗号分隔)</label>
+    <textarea id="addFeatures" placeholder="功能1, 功能2, 功能3"></textarea>
+    <label>端口号</label>
+    <input type="number" id="addPort" value="5002" min="5002" max="5999">
+    <label>应用相对目录</label>
+    <input type="text" id="addDir" placeholder="../my-app">
+    <label>入口文件</label>
+    <input type="text" id="addEntry" value="app.py">
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeAddModal()">取消</button>
+      <button class="btn btn-primary" onclick="addApp()">注册</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let pendingActions = {}; // app_id → 'starting' | 'stopping'
+
+async function loadApps() {
+  const res = await fetch('/api/apps');
+  const apps = await res.json();
+  renderApps(apps);
+}
+
+function renderApps(apps) {
+  const grid = document.getElementById('appGrid');
+  const empty = document.getElementById('emptyHint');
+  if (apps.length === 0) { empty.style.display = 'block'; grid.innerHTML = ''; return; }
+  empty.style.display = 'none';
+
+  let html = '';
+  apps.forEach(a => {
+    const isRunning = a._status === 'running';
+    const isBroken = a._status === 'broken';
+    const pending = pendingActions[a.id];
+    const statusClass = isBroken ? 'status-broken' : (isRunning ? 'status-running' : 'status-stopped');
+    const statusText = isBroken ? '⚠ 文件缺失' : (pending ? (pending === 'starting' ? '正在启动...' : '正在停止...') : (isRunning ? '运行中' : '未启动'));
+    const featuresHtml = (a.features || []).map(f => `<span class="feature-badge">${f}</span>`).join('');
+
+    let btnHtml = '';
+    if (isBroken) {
+      btnHtml = '<span style="color:#e74c3c;font-size:12px;">应用文件已删除或移动，请检查路径</span>';
+    } else if (pending) {
+      btnHtml = `<button class="btn btn-outline btn-sm" disabled>${pending === 'starting' ? '⏳ 正在启动...' : '⏳ 正在停止...'}</button>`;
+    } else if (isRunning) {
+      btnHtml = `<button class="btn btn-outline btn-sm" onclick="openApp('${a.id}', ${a.port})">📂 打开</button>
+                 <button class="btn btn-outline btn-sm" onclick="toggleApp('${a.id}', 'stop')">⏹ 停止</button>`;
+    } else {
+      btnHtml = `<button class="btn btn-primary btn-sm" onclick="toggleApp('${a.id}', 'start')">▶ 启动</button>`;
+    }
+    html += `
+    <div class="card ${isBroken ? 'card-broken' : ''}">
+      <div class="card-header">
+        <span class="card-title">${a.name}</span>
+        <span class="status ${statusClass}"><span class="status-dot"></span>${statusText}</span>
+      </div>
+      <div class="card-desc">${a.description || ''}</div>
+      <div class="features">${featuresHtml}</div>
+      <div class="app-path">📁 ${a._path || a.directory || ''}</div>
+      <div class="card-footer">
+        ${btnHtml}
+        <button class="btn btn-outline btn-sm" style="margin-left:auto;" onclick="removeApp('${a.id}')">🗑</button>
+      </div>
+    </div>`;
+  });
+  html += `<div class="card add-card" onclick="showAddModal()"><span class="plus">+</span><span>注册新应用</span></div>`;
+  grid.innerHTML = html;
+}
+
+async function toggleApp(id, action) {
+  pendingActions[id] = action === 'start' ? 'starting' : 'stopping';
+  renderDynamic();
+  try {
+    const res = await fetch(`/api/${action}/${id}`, { method: 'POST' });
+    const data = await res.json();
+    if (data.error) alert(data.error);
+    else if (data.status === 'running_external') alert('该应用未通过工具箱启动，无法停止。请手动终止进程。');
+  } finally {
+    delete pendingActions[id];
+    loadApps();
+  }
+}
+
+async function renderDynamic() {
+  const res = await fetch('/api/apps');
+  const apps = await res.json();
+  renderApps(apps);
+}
+
+function openApp(id, port) {
+  window.open(`http://localhost:${port}`, '_blank');
+}
+
+async function removeApp(id) {
+  if (!confirm(`确定移除应用 "${id}" ？`)) return;
+  const res = await fetch('/api/apps');
+  let apps = await res.json();
+  apps = apps.filter(a => a.id !== id);
+  await fetch('/api/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(apps)
+  });
+  loadApps();
+}
+
+function showAddModal() { document.getElementById('addModal').classList.add('show'); }
+function closeAddModal() { document.getElementById('addModal').classList.remove('show'); }
+
+async function addApp() {
+  const id = document.getElementById('addId').value.trim();
+  const name = document.getElementById('addName').value.trim();
+  const desc = document.getElementById('addDesc').value.trim();
+  const features = document.getElementById('addFeatures').value.split(',').map(f => f.trim()).filter(f => f);
+  const port = parseInt(document.getElementById('addPort').value);
+  const directory = document.getElementById('addDir').value.trim();
+  const entry = document.getElementById('addEntry').value.trim();
+  if (!id || !name) { alert('请填写应用 ID 和名称'); return; }
+
+  const res = await fetch('/api/apps');
+  let apps = await res.json();
+  if (apps.find(a => a.id === id)) { alert('应用 ID 已存在'); return; }
+  apps.push({ id, name, description: desc, features, port, directory, entry });
+  await fetch('/api/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(apps)
+  });
+  closeAddModal();
+  loadApps();
+}
+
+loadApps();
+setInterval(loadApps, 10000);
+</script>
+</body>
+</html>

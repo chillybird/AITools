@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>尺寸测量工具</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; }
+.header { background: #16213e; padding: 14px 24px; display: flex; align-items: center; gap: 16px; border-bottom: 2px solid #0f3460; }
+.header h1 { font-size: 20px; color: #e94560; }
+.main-container { display: flex; gap: 16px; padding: 16px; height: calc(100vh - 70px); }
+.panel { background: #16213e; border-radius: 10px; border: 1px solid #0f3460; display: flex; flex-direction: column; overflow: hidden; }
+.panel-header { padding: 12px 16px; background: #0f3460; font-size: 14px; font-weight: bold; color: #e94560; flex-shrink: 0; }
+.panel-left { flex: 1; min-width: 0; }
+.panel-right { flex: 1; min-width: 0; }
+.canvas-wrapper { flex: 1; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #1a1a2e; }
+canvas { cursor: crosshair; display: block; }
+.controls { padding: 12px 16px; background: #0f3460; flex-shrink: 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.controls label { font-size: 13px; white-space: nowrap; }
+.controls input[type="number"] { width: 70px; padding: 5px 8px; border-radius: 5px; border: 1px solid #533483; background: #1a1a2e; color: #e0e0e0; font-size: 13px; }
+.controls input[type="file"] { display: none; }
+.btn { padding: 7px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.2s; white-space: nowrap; }
+.btn-primary { background: #e94560; color: #fff; }
+.btn-primary:hover { background: #d63851; }
+.btn-secondary { background: #533483; color: #fff; }
+.btn-secondary:hover { background: #452a6e; }
+.btn-outline { background: transparent; border: 1px solid #533483; color: #e0e0e0; }
+.btn-outline:hover { background: #533483; }
+.btn-danger { background: #c0392b; color: #fff; }
+.btn-danger:hover { background: #a93226; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.upload-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; cursor: pointer; color: #666; transition: all 0.3s; }
+.upload-area:hover { color: #e94560; background: rgba(233,69,96,0.05); }
+.upload-area svg { width: 64px; height: 64px; stroke: currentColor; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+.badge-info { background: #533483; color: #fff; }
+.badge-success { background: #27ae60; color: #fff; }
+.result-box { padding: 10px 16px; background: #1a1a2e; border-radius: 8px; border: 1px solid #27ae60; margin-top: 8px; display: none; }
+.result-box.show { display: block; }
+.result-box .value { font-size: 22px; font-weight: bold; color: #27ae60; }
+.result-box .label { font-size: 12px; color: #888; }
+.instruction { font-size: 12px; color: #888; padding: 4px 0; }
+.point-counter { font-size: 12px; color: #e94560; }
+.status-bar { padding: 4px 16px; font-size: 12px; color: #888; background: #0f3460; flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; }
+.zoom-indicator { color: #e94560; font-weight: bold; }
+.zoom-btn { background: transparent; border: 1px solid #533483; color: #e0e0e0; border-radius: 3px; cursor: pointer; font-size: 12px; padding: 1px 6px; margin: 0 2px; }
+.zoom-btn:hover { background: #533483; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📏 尺寸测量工具</h1>
+  <span style="font-size:12px;color:#888;">透视矫正 + 精确测量</span>
+</div>
+
+<div class="main-container">
+  <!-- 左侧: 原始图片 & 选点 -->
+  <div class="panel panel-left">
+    <div class="panel-header">📷 步骤一: 上传图片 & 选择四个参考点</div>
+    <div class="canvas-wrapper" id="leftWrapper">
+      <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5">
+          <path d="M12 16V4m0 0L8 8m4-4l4 4"/><rect x="3" y="13" width="18" height="8" rx="2"/>
+        </svg>
+        <div>点击此处上传图片</div>
+        <div style="font-size:12px;">支持 JPG / PNG / BMP / WebP</div>
+      </div>
+      <canvas id="srcCanvas" style="display:none;"></canvas>
+    </div>
+    <input type="file" id="fileInput" accept="image/*" onchange="handleUpload(this)">
+    <div class="status-bar">
+      <span class="point-counter" id="pointStatus">尚未上传图片</span>
+      <span style="display:flex;align-items:center;gap:6px;">
+        <button class="zoom-btn" onclick="zoomToFit()" title="适合窗口">⊡</button>
+        <button class="zoom-btn" onclick="zoomChange(-0.3)" title="缩小">−</button>
+        <span class="zoom-indicator" id="zoomStatus">100%</span>
+        <button class="zoom-btn" onclick="zoomChange(0.3)" title="放大">+</button>
+        <span class="instruction" id="instruction" style="margin-left:8px;"></span>
+      </span>
+    </div>
+    <div class="controls">
+      <label>参考矩形宽度 (mm):</label>
+      <input type="number" id="realWidth" value="210" step="0.1" min="1">
+      <label>参考矩形高度 (mm):</label>
+      <input type="number" id="realHeight" value="297" step="0.1" min="1">
+      <button class="btn btn-outline" onclick="resetPoints()">重置选点</button>
+      <button class="btn btn-primary" id="btnCorrect" onclick="doCorrect()" disabled>透视矫正 →</button>
+    </div>
+  </div>
+
+  <!-- 右侧: 矫正后图片 & 测量 -->
+  <div class="panel panel-right">
+    <div class="panel-header">📐 步骤二: 测量尺寸</div>
+    <div class="canvas-wrapper" id="rightWrapper">
+      <div style="color:#444;font-size:14px;" id="rightPlaceholder">请先在左侧完成透视矫正</div>
+      <canvas id="dstCanvas" style="display:none;"></canvas>
+    </div>
+    <div class="status-bar">
+      <span id="measureStatus">等待矫正...</span>
+      <span style="display:none;align-items:center;gap:6px;" id="dstZoomBar">
+        <button class="zoom-btn" onclick="dstZoomToFit()" title="适合窗口">⊡</button>
+        <button class="zoom-btn" onclick="dstZoomChange(-0.3)" title="缩小">−</button>
+        <span class="zoom-indicator" id="dstZoomStatus">100%</span>
+        <button class="zoom-btn" onclick="dstZoomChange(0.3)" title="放大">+</button>
+        <span class="instruction" id="measureInstruction" style="margin-left:8px;"></span>
+      </span>
+      <span class="instruction" id="measureInstruction2"></span>
+    </div>
+    <div class="controls" id="measureControls" style="display:none;">
+      <button class="btn btn-primary" id="btnDistance" onclick="setMeasureMode('distance')">📏 测距离</button>
+      <button class="btn btn-secondary" id="btnRect" onclick="setMeasureMode('rect')">⬜ 测矩形</button>
+      <button class="btn btn-outline" onclick="clearMeasure()">清除测量</button>
+      <button class="btn btn-outline" onclick="exportImage()">💾 导出图片</button>
+      <button class="btn btn-danger" onclick="backToUpload()">← 返回重选</button>
+    </div>
+    <div class="controls" id="rectControls" style="display:none;border-top:1px solid #533483;">
+      <label>旋转角度:</label>
+      <input type="range" id="rectAngle" value="0" min="-180" max="180" step="0.5" oninput="onRectAngleChange()" style="width:100px;">
+      <input type="number" id="rectAngleNum" value="0" min="-180" max="180" step="0.1" onchange="onRectAngleNumChange()" style="width:55px;padding:2px 4px;text-align:center;">
+      <span style="font-size:13px;">°</span>
+    </div>
+    <div class="result-box" id="resultBox">
+      <span class="label" id="resultLabel"></span>
+      <span class="value" id="resultValue"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== 全局变量 ====================
+let srcImg = null;
+let srcFilename = null;
+let srcCanvasEl = document.getElementById('srcCanvas');
+let srcCtx = srcCanvasEl.getContext('2d');
+let srcPoints = []; // 4个选中的点, 坐标位于"显示坐标系"(zoom=1时的canvas坐标)
+const POINT_COLORS = ['#e74c3c', '#2ecc71', '#3498db', '#f39c12'];
+const CORNER_LABELS = ['左上角', '右上角', '右下角', '左下角'];
+
+// ==================== 缩放 & 平移 (src)
+let srcZoom = 1;
+let srcPanX = 0, srcPanY = 0;
+let srcDisplayWidth = 0, srcDisplayHeight = 0;
+let srcImgOffsetX = 0, srcImgOffsetY = 0;
+let srcImgScale = 1;
+let isPanning = false, panStartX = 0, panStartY = 0;
+let dragIndex = -1;
+
+// 右侧矫正图
+let dstImg = null;
+let dstScaleX = 0, dstScaleY = 0;
+let dstCanvasEl = document.getElementById('dstCanvas');
+let dstCtx = dstCanvasEl.getContext('2d');
+let measureMode = 'distance';
+let measurePoints = []; // 显示坐标系 (zoom=1 时的 canvas 坐标)
+let holePoints = [];    // 孔测量: [{x, y, radius}, ...]
+let holeDragState = { active: false, index: -1, type: '' }; // type: 'center' | 'radius'
+let rectangles = [];    // [{c1: {x,y}, c2: {x,y}, angle: number}, ...]
+let rectDraft = null;   // {c1: {x,y}, c2: {x,y}} | null (拖拽创建中)
+let rectDragTarget = null; // {idx: number, corner: 0-3} | null (拖拽已有矩形角点)
+let rectMoveTarget = null;  // {idx: number, ox: number, oy: number} | null (拖拽移动整个矩形)
+let selectedRectIdx = -1;   // 当前选中矩形索引, -1 表示无选中
+let dstZoom = 1, dstPanX = 0, dstPanY = 0;
+let dstDisplayWidth = 0, dstDisplayHeight = 0;
+let dstImgScale = 1;
+let dstIsPanning = false, dstPanStartX = 0, dstPanStartY = 0;
+
+// ==================== 上传 ====================
+function handleUpload(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  const formData = new FormData();
+  formData.append('image', file);
+
+  fetch('/upload', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { alert(data.error); return; }
+      srcFilename = data.filename;
+      srcImg = new Image();
+      srcImg.onload = () => {
+        document.getElementById('uploadArea').style.display = 'none';
+        srcCanvasEl.style.display = 'block';
+        requestAnimationFrame(() => {
+          initSrcCanvas();
+          drawSrc();
+          srcPoints = [];
+          updatePointStatus();
+          document.getElementById('instruction').textContent = '请依次点击图片中参考矩形的四个角点  |  滚轮缩放 · 右键拖拽平移';
+        });
+      };
+      srcImg.src = data.url;
+    })
+    .catch(err => alert('上传失败: ' + err));
+  input.value = '';
+}
+
+// ==================== 左侧 Canvas: 缩放 + 平移 ====================
+function initSrcCanvas() {
+  const wrapper = srcCanvasEl.parentElement;
+  const maxW = wrapper.clientWidth;
+  const maxH = wrapper.clientHeight;
+  const imgAspect = srcImg.naturalWidth / srcImg.naturalHeight;
+
+  srcCanvasEl.width = maxW;
+  srcCanvasEl.height = maxH;
+
+  if (maxW / maxH > imgAspect) {
+    srcDisplayHeight = maxH;
+    srcDisplayWidth = srcDisplayHeight * imgAspect;
+  } else {
+    srcDisplayWidth = maxW;
+    srcDisplayHeight = srcDisplayWidth / imgAspect;
+  }
+
+  srcImgOffsetX = (maxW - srcDisplayWidth) / 2;
+  srcImgOffsetY = (maxH - srcDisplayHeight) / 2;
+  srcZoom = 1;
+  srcPanX = 0;
+  srcPanY = 0;
+  srcImgScale = srcDisplayWidth / srcImg.naturalWidth;
+  updateZoomStatus();
+}
+
+// 显示坐标 → canvas 像素坐标
+function dispToCanvas(dx, dy) {
+  return { x: dx * srcZoom + srcPanX, y: dy * srcZoom + srcPanY };
+}
+
+// canvas 像素坐标 → 显示坐标 (相对图片左上角)
+function canvasToDisp(cx, cy) {
+  return {
+    x: (cx - srcPanX) / srcZoom - srcImgOffsetX,
+    y: (cy - srcPanY) / srcZoom - srcImgOffsetY
+  };
+}
+
+function panWithinBounds() {
+  const cw = srcCanvasEl.width, ch = srcCanvasEl.height;
+  const vw = cw / srcZoom, vh = ch / srcZoom;
+  const margin = 0.3;
+
+  let minPX = cw - (srcImgOffsetX + (1 + margin) * srcDisplayWidth) * srcZoom;
+  let maxPX = (srcImgOffsetX + margin * srcDisplayWidth) * srcZoom;
+  if (minPX > maxPX) { const mid = (minPX + maxPX) / 2; minPX = maxPX = mid; }
+
+  let minPY = ch - (srcImgOffsetY + (1 + margin) * srcDisplayHeight) * srcZoom;
+  let maxPY = (srcImgOffsetY + margin * srcDisplayHeight) * srcZoom;
+  if (minPY > maxPY) { const mid = (minPY + maxPY) / 2; minPY = maxPY = mid; }
+
+  srcPanX = Math.max(minPX, Math.min(maxPX, srcPanX));
+  srcPanY = Math.max(minPY, Math.min(maxPY, srcPanY));
+}
+
+function updateZoomStatus() {
+  document.getElementById('zoomStatus').textContent = Math.round(srcZoom * 100) + '%';
+}
+
+function drawSrc() {
+  if (!srcImg) return;
+  const cw = srcCanvasEl.width, ch = srcCanvasEl.height;
+  srcCtx.clearRect(0, 0, cw, ch);
+  srcCtx.save();
+  srcCtx.translate(srcPanX + srcImgOffsetX * srcZoom, srcPanY + srcImgOffsetY * srcZoom);
+  srcCtx.scale(srcZoom, srcZoom);
+  srcCtx.drawImage(srcImg, 0, 0, srcDisplayWidth, srcDisplayHeight);
+
+  const r = 7 / srcZoom;
+  const lineW = 2 / srcZoom;
+  const fontSize = Math.max(11, 13 / srcZoom);
+
+  srcPoints.forEach((p, i) => {
+    srcCtx.beginPath();
+    srcCtx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    srcCtx.fillStyle = POINT_COLORS[i];
+    srcCtx.fill();
+    srcCtx.strokeStyle = '#fff';
+    srcCtx.lineWidth = lineW;
+    srcCtx.stroke();
+
+    srcCtx.font = `bold ${fontSize}px "Microsoft YaHei"`;
+    srcCtx.fillStyle = '#fff';
+    srcCtx.textAlign = 'center';
+    srcCtx.fillText(`${i+1}`, p.x, p.y - r - fontSize * 0.3);
+  });
+
+  if (srcPoints.length >= 2) {
+    srcCtx.beginPath();
+    srcCtx.strokeStyle = 'rgba(233,69,96,0.6)';
+    srcCtx.lineWidth = lineW;
+    srcCtx.setLineDash([6 / srcZoom, 4 / srcZoom]);
+    for (let i = 0; i < srcPoints.length; i++) {
+      if (i === 0) srcCtx.moveTo(srcPoints[i].x, srcPoints[i].y);
+      else srcCtx.lineTo(srcPoints[i].x, srcPoints[i].y);
+    }
+    if (srcPoints.length === 4) {
+      srcCtx.lineTo(srcPoints[0].x, srcPoints[0].y);
+    }
+    srcCtx.stroke();
+    srcCtx.setLineDash([]);
+  }
+  srcCtx.restore();
+}
+
+// 滚轮缩放
+srcCanvasEl.addEventListener('wheel', (e) => {
+  if (!srcImg) return;
+  e.preventDefault();
+
+  const rect = srcCanvasEl.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  const rawX = (mx - srcPanX) / srcZoom;
+  const rawY = (my - srcPanY) / srcZoom;
+  const factor = e.deltaY < 0 ? 1.15 : 0.87;
+
+  srcZoom = Math.max(0.5, Math.min(10, srcZoom * factor));
+
+  srcPanX = mx - rawX * srcZoom;
+  srcPanY = my - rawY * srcZoom;
+
+  panWithinBounds();
+  updateZoomStatus();
+  drawSrc();
+}, { passive: false });
+
+// 右键/中键 拖拽平移
+
+srcCanvasEl.addEventListener('mousedown', (e) => {
+  if (!srcImg) return;
+  const rect = srcCanvasEl.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  // 右键或中键 → 平移
+  if (e.button === 1 || e.button === 2) {
+    e.preventDefault();
+    isPanning = true;
+    panStartX = mx - srcPanX;
+    panStartY = my - srcPanY;
+    srcCanvasEl.style.cursor = 'grabbing';
+    return;
+  }
+
+  // 左键点击4个点完成后的拖动
+  if (e.button === 0 && srcPoints.length >= 4) {
+    const disp = canvasToDisp(mx, my);
+    const hitR = 10 / srcZoom;
+    for (let i = 0; i < srcPoints.length; i++) {
+      const dx = disp.x - srcPoints[i].x;
+      const dy = disp.y - srcPoints[i].y;
+      if (Math.sqrt(dx*dx + dy*dy) < hitR) {
+        dragIndex = i;
+        srcCanvasEl.style.cursor = 'grabbing';
+        return;
+      }
+    }
+  }
+  dragIndex = -1;
+});
+
+srcCanvasEl.addEventListener('contextmenu', (e) => e.preventDefault());
+
+window.addEventListener('mousemove', (e) => {
+  if (!srcImg) return;
+  const rect = srcCanvasEl.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  if (isPanning) {
+    srcPanX = mx - panStartX;
+    srcPanY = my - panStartY;
+    drawSrc();
+    return;
+  }
+
+  if (dragIndex >= 0) {
+    const disp = canvasToDisp(mx, my);
+    srcPoints[dragIndex].x = Math.max(0, Math.min(srcDisplayWidth, disp.x));
+    srcPoints[dragIndex].y = Math.max(0, Math.min(srcDisplayHeight, disp.y));
+    drawSrc();
+    return;
+  }
+
+  // 光标样式
+  if (srcPoints.length < 4) {
+    srcCanvasEl.style.cursor = 'crosshair';
+  } else {
+    const disp = canvasToDisp(mx, my);
+    const hitR = 10 / srcZoom;
+    let near = false;
+    for (let i = 0; i < srcPoints.length; i++) {
+      const dx = disp.x - srcPoints[i].x;
+      const dy = disp.y - srcPoints[i].y;
+      if (Math.sqrt(dx*dx + dy*dy) < hitR) { near = true; break; }
+    }
+    srcCanvasEl.style.cursor = near ? 'grab' : 'default';
+  }
+});
+
+window.addEventListener('mouseup', (e) => {
+  if (isPanning) {
+    isPanning = false;
+    if (srcPoints.length < 4) srcCanvasEl.style.cursor = 'crosshair';
+    else srcCanvasEl.style.cursor = 'default';
+  }
+  if (dragIndex >= 0) {
+    dragIndex = -1;
+    if (srcPoints.length < 4) srcCanvasEl.style.cursor = 'crosshair';
+    else srcCanvasEl.style.cursor = 'default';
+  }
+});
+
+// 左键点击添加点
+srcCanvasEl.addEventListener('click', (e) => {
+  if (!srcImg) return;
+  if (isPanning) return;
+  if (srcPoints.length >= 4) return;
+
+  const rect = srcCanvasEl.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const disp = canvasToDisp(mx, my);
+
+  disp.x = Math.max(0, Math.min(srcDisplayWidth, disp.x));
+  disp.y = Math.max(0, Math.min(srcDisplayHeight, disp.y));
+  srcPoints.push({ x: disp.x, y: disp.y });
+  drawSrc();
+  updatePointStatus();
+
+  if (srcPoints.length === 4) {
+    document.getElementById('instruction').textContent = '四个点已选定，可拖拽调整圆点位置  |  滚轮缩放 · 右键拖拽平移';
+    document.getElementById('btnCorrect').disabled = false;
+  }
+});
+
+let mouseOverSrc = false, mouseOverDst = false;
+srcCanvasEl.addEventListener('mouseenter', () => { mouseOverSrc = true; });
+srcCanvasEl.addEventListener('mouseleave', () => { mouseOverSrc = false; });
+dstCanvasEl.addEventListener('mouseenter', () => { mouseOverDst = true; });
+dstCanvasEl.addEventListener('mouseleave', () => { mouseOverDst = false; });
+
+// Ctrl+Z 统一撤销(优先当前鼠标所在面板)
+window.addEventListener('keydown', (e) => {
+  if (!e.ctrlKey || e.key !== 'z') return;
+  if (mouseOverDst && dstImg) {
+    if (measureMode === 'rect' && rectangles.length > 0) {
+      e.preventDefault();
+      rectangles.pop();
+      drawDst();
+      document.getElementById('measureStatus').textContent = `矩形已撤销，剩余 ${rectangles.length} 个`;
+      return;
+    }
+    if (measureMode === 'distance' && holePoints.length > 0) {
+      e.preventDefault();
+      holePoints.pop();
+      drawDst();
+      updateHoleStatus();
+      return;
+    }
+  }
+  if (mouseOverSrc && srcImg && srcPoints.length > 0) {
+    e.preventDefault();
+    srcPoints.pop();
+    drawSrc();
+    updatePointStatus();
+    document.getElementById('btnCorrect').disabled = srcPoints.length !== 4;
+    if (srcPoints.length < 4) {
+      document.getElementById('instruction').textContent = `已撤销，请继续选择角点 (剩余 ${4 - srcPoints.length} 个)  |  滚轮缩放 · 右键拖拽平移`;
+    }
+  }
+});
+
+function updatePointStatus() {
+  const el = document.getElementById('pointStatus');
+  if (!srcImg) el.textContent = '尚未上传图片';
+  else if (srcPoints.length < 4) el.textContent = `已选中 ${srcPoints.length}/4 个点`;
+  else el.textContent = '✅ 四个点已选定';
+}
+
+function resetPoints() {
+  srcPoints = [];
+  document.getElementById('btnCorrect').disabled = true;
+  document.getElementById('instruction').textContent = '请依次点击图片中参考矩形的四个角点  |  滚轮缩放 · 右键拖拽平移';
+  updatePointStatus();
+  drawSrc();
+}
+
+// ==================== 缩放控制 ====================
+function zoomChange(delta) {
+  if (!srcImg) return;
+  const cw = srcCanvasEl.width, ch = srcCanvasEl.height;
+  const cx = cw / 2, cy = ch / 2;
+  const rawX = (cx - srcPanX) / srcZoom;
+  const rawY = (cy - srcPanY) / srcZoom;
+  srcZoom = Math.max(0.5, Math.min(10, srcZoom + delta * srcZoom));
+  srcPanX = cx - rawX * srcZoom;
+  srcPanY = cy - rawY * srcZoom;
+  panWithinBounds();
+  updateZoomStatus();
+  drawSrc();
+}
+
+function zoomToFit() {
+  if (!srcImg) return;
+  srcZoom = 1;
+  srcPanX = 0;
+  srcPanY = 0;
+  updateZoomStatus();
+  drawSrc();
+}
+
+function initDstCanvas() {
+  const wrapper = dstCanvasEl.parentElement;
+  const maxW = wrapper.clientWidth;
+  const maxH = wrapper.clientHeight;
+  const imgAspect = dstImg.naturalWidth / dstImg.naturalHeight;
+  if (maxW / maxH > imgAspect) {
+    dstDisplayHeight = maxH;
+    dstDisplayWidth = dstDisplayHeight * imgAspect;
+  } else {
+    dstDisplayWidth = maxW;
+    dstDisplayHeight = dstDisplayWidth / imgAspect;
+  }
+  dstCanvasEl.width = dstDisplayWidth;
+  dstCanvasEl.height = dstDisplayHeight;
+  dstZoom = 1;
+  dstPanX = 0;
+  dstPanY = 0;
+  dstImgScale = dstDisplayWidth / dstImg.naturalWidth;
+  updateDstZoomStatus();
+}
+
+function dstCanvasToDisp(cx, cy) {
+  return { x: (cx - dstPanX) / dstZoom, y: (cy - dstPanY) / dstZoom };
+}
+
+function dstPanWithinBounds() {
+  const cw = dstCanvasEl.width, ch = dstCanvasEl.height;
+  const vw = cw / dstZoom, vh = ch / dstZoom;
+  const margin = 0.3;
+  dstPanX = Math.max(-(dstDisplayWidth * (1 + margin) - vw) * dstZoom,
+                     Math.min(dstDisplayWidth * margin, dstPanX));
+  dstPanY = Math.max(-(dstDisplayHeight * (1 + margin) - vh) * dstZoom,
+                     Math.min(dstDisplayHeight * margin, dstPanY));
+}
+
+function updateDstZoomStatus() {
+  document.getElementById('dstZoomStatus').textContent = Math.round(dstZoom * 100) + '%';
+}
+
+function dstZoomChange(delta) {
+  if (!dstImg) return;
+  const cx = dstCanvasEl.width / 2, cy = dstCanvasEl.height / 2;
+  const oldDisp = dstCanvasToDisp(cx, cy);
+  const oldZoom = dstZoom;
+  dstZoom = Math.max(0.5, Math.min(10, dstZoom + delta * dstZoom));
+  dstPanX = cx - oldDisp.x * dstZoom;
+  dstPanY = cy - oldDisp.y * dstZoom;
+  dstPanWithinBounds();
+  updateDstZoomStatus();
+  drawDst();
+}
+
+function dstZoomToFit() {
+  if (!dstImg) return;
+  dstZoom = 1;
+  dstPanX = 0;
+  dstPanY = 0;
+  updateDstZoomStatus();
+  drawDst();
+}
+
+// ==================== 透视矫正 ====================
+function doCorrect() {
+  if (srcPoints.length !== 4) return;
+
+  const realW = parseFloat(document.getElementById('realWidth').value);
+  const realH = parseFloat(document.getElementById('realHeight').value);
+  if (!realW || !realH || realW <= 0 || realH <= 0) {
+    alert('请设置有效的参考矩形宽高');
+    return;
+  }
+
+  const points = srcPoints.map(p => ({ x: p.x / srcImgScale, y: p.y / srcImgScale }));
+
+  fetch('/correct', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      filename: srcFilename,
+      points: points.map(p => [p.x, p.y]),
+      real_width: realW,
+      real_height: realH
+    })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) { alert(data.error); return; }
+    dstScaleX = data.scale_x;
+    dstScaleY = data.scale_y;
+    dstImg = new Image();
+    dstImg.onload = () => {
+      document.getElementById('rightPlaceholder').style.display = 'none';
+      dstCanvasEl.style.display = 'block';
+      document.getElementById('measureControls').style.display = 'flex';
+      document.getElementById('dstZoomBar').style.display = 'flex';
+      requestAnimationFrame(() => {
+        initDstCanvas();
+        measurePoints = [];
+        holePoints = [];
+        holeDragState = { active: false, index: -1, type: '' };
+        rectangles = [];
+        rectDraft = null;
+        rectDragTarget = null;
+        selectedRectIdx = -1;
+        drawDst();
+        document.getElementById('measureStatus').textContent = '矫正完成 — 请选择测量模式';
+        document.getElementById('measureInstruction').textContent = '点击"测距离"或"测面积"开始测量  |  滚轮缩放 · 右键拖拽平移';
+        hideResult();
+      });
+    };
+    dstImg.src = data.url;
+  })
+  .catch(err => alert('矫正失败: ' + err));
+}
+
+// ==================== 右侧: 显示 & 测量 ====================
+function drawDst() {
+  if (!dstImg) return;
+  const cw = dstCanvasEl.width, ch = dstCanvasEl.height;
+  dstCtx.clearRect(0, 0, cw, ch);
+  dstCtx.save();
+  dstCtx.translate(dstPanX, dstPanY);
+  dstCtx.scale(dstZoom, dstZoom);
+  dstCtx.drawImage(dstImg, 0, 0, dstDisplayWidth, dstDisplayHeight);
+
+  const lineW = 2 / dstZoom;
+  const fontSize = Math.max(11, 12 / dstZoom);
+
+  // 绘制距离标记点 (始终显示, 与当前模式无关)
+  function drawDistancePoints() {
+    holePoints.forEach((h, i) => {
+      dstCtx.beginPath();
+      dstCtx.arc(h.x, h.y, h.radius, 0, Math.PI * 2);
+      dstCtx.fillStyle = 'rgba(233,69,96,0.15)';
+      dstCtx.fill();
+      dstCtx.strokeStyle = '#e94560';
+      dstCtx.lineWidth = 2 / dstZoom;
+      dstCtx.setLineDash([]);
+      dstCtx.stroke();
+
+      const diamMm = (h.radius * 2) / dstImgScale * dstScaleX;
+      const labelX = h.x + h.radius + 8 / dstZoom;
+      dstCtx.font = `${fontSize}px "Microsoft YaHei"`;
+      dstCtx.fillStyle = '#e94560';
+      dstCtx.textAlign = 'left';
+      dstCtx.fillText(`⌀${diamMm.toFixed(2)}mm`, labelX, h.y + fontSize * 0.35);
+
+      const cr = 5 / dstZoom;
+      dstCtx.beginPath();
+      dstCtx.arc(h.x, h.y, cr, 0, Math.PI * 2);
+      dstCtx.fillStyle = '#e94560';
+      dstCtx.fill();
+      dstCtx.strokeStyle = '#fff';
+      dstCtx.lineWidth = lineW;
+      dstCtx.stroke();
+
+      dstCtx.font = `bold ${fontSize}px "Microsoft YaHei"`;
+      dstCtx.fillStyle = '#fff';
+      dstCtx.textAlign = 'center';
+      dstCtx.fillText(`${i+1}`, h.x, h.y - cr - fontSize * 0.3);
+    });
+
+    if (holePoints.length >= 2) {
+      dstCtx.strokeStyle = 'rgba(255,255,255,0.6)';
+      dstCtx.lineWidth = 1.5 / dstZoom;
+      dstCtx.setLineDash([5 / dstZoom, 3 / dstZoom]);
+      dstCtx.font = `bold ${fontSize}px "Microsoft YaHei"`;
+      for (let i = 1; i < holePoints.length; i++) {
+        const a = holePoints[i - 1], b = holePoints[i];
+        dstCtx.beginPath();
+        dstCtx.moveTo(a.x, a.y);
+        dstCtx.lineTo(b.x, b.y);
+        dstCtx.stroke();
+        const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        const dx = (a.x - b.x) / dstImgScale * dstScaleX;
+        const dy = (a.y - b.y) / dstImgScale * dstScaleY;
+        const distMm = Math.sqrt(dx * dx + dy * dy);
+        const offset = 12 / dstZoom;
+        const angle = Math.atan2(-(b.y - a.y), b.x - a.x);
+        dstCtx.fillStyle = '#fff';
+        dstCtx.textAlign = 'center';
+        dstCtx.fillText(`${distMm.toFixed(2)}mm`, mx + Math.sin(angle) * offset, my + Math.cos(angle) * offset);
+      }
+
+      // 3+ 点 → 闭合多边形并显示面积
+      if (holePoints.length >= 3) {
+        const last = holePoints[holePoints.length - 1], first = holePoints[0];
+        dstCtx.beginPath();
+        dstCtx.moveTo(last.x, last.y);
+        dstCtx.lineTo(first.x, first.y);
+        dstCtx.stroke();
+
+        // Shoelace 面积
+        let area = 0, cx = 0, cy = 0;
+        const n = holePoints.length;
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n;
+          const xi = holePoints[i].x / dstImgScale * dstScaleX;
+          const yi = holePoints[i].y / dstImgScale * dstScaleY;
+          const xj = holePoints[j].x / dstImgScale * dstScaleX;
+          const yj = holePoints[j].y / dstImgScale * dstScaleY;
+          area += xi * yj - xj * yi;
+          cx += xi; cy += yi;
+        }
+        area = Math.abs(area) / 2;
+        cx /= n; cy /= n;
+        // 转换回显示坐标显示标签
+        const areaLabelX = holePoints.reduce((s, p) => s + p.x, 0) / n;
+        const areaLabelY = holePoints.reduce((s, p) => s + p.y, 0) / n;
+        dstCtx.fillStyle = '#2ecc71';
+        dstCtx.fillText(`${area.toFixed(2)}mm²`, areaLabelX, areaLabelY);
+      }
+      dstCtx.setLineDash([]);
+    }
+  }
+
+  // 绘制矩形 (始终显示, 与当前模式无关)
+  function drawAllRects() {
+    function drawOneRect(r, color, isDraft, isSelected) {
+      const cx = (r.c1.x + r.c2.x) / 2;
+      const cy = (r.c1.y + r.c2.y) / 2;
+      const w = Math.abs(r.c2.x - r.c1.x);
+      const h = Math.abs(r.c2.y - r.c1.y);
+      const angleRad = (r.angle || 0) * Math.PI / 180;
+      const cos = Math.cos(angleRad), sin = Math.sin(angleRad);
+      function rotate(lx, ly) {
+        return { x: cx + (lx - cx) * cos - (ly - cy) * sin, y: cy + (lx - cx) * sin + (ly - cy) * cos };
+      }
+      const corners = [
+        rotate(r.c1.x, r.c1.y), rotate(r.c2.x, r.c1.y),
+        rotate(r.c2.x, r.c2.y), rotate(r.c1.x, r.c2.y)
+      ];
+      const borderColor = isSelected ? '#00d4ff' : (isDraft ? '#f39c12' : color);
+      const fillColor = isSelected ? 'rgba(0,212,255,0.15)' : (isDraft ? 'rgba(243,156,18,0.12)' : 'rgba(233,69,96,0.1)');
+      const lw = isSelected ? 3 : (isDraft ? 1.5 : 2);
+      dstCtx.beginPath();
+      dstCtx.moveTo(corners[0].x, corners[0].y);
+      for (let i = 1; i < 4; i++) dstCtx.lineTo(corners[i].x, corners[i].y);
+      dstCtx.closePath();
+      dstCtx.fillStyle = fillColor;
+      dstCtx.fill();
+      dstCtx.strokeStyle = borderColor;
+      dstCtx.lineWidth = lw / dstZoom;
+      dstCtx.setLineDash(isDraft ? [4 / dstZoom, 4 / dstZoom] : []);
+      dstCtx.stroke();
+      dstCtx.setLineDash([]);
+      const handleR = 5 / dstZoom;
+      corners.forEach((c, i) => {
+        if (isDraft) return;
+        dstCtx.beginPath();
+        dstCtx.arc(c.x, c.y, handleR, 0, Math.PI * 2);
+        dstCtx.fillStyle = i === 0 || i === 2 ? borderColor : '#f39c12';
+        dstCtx.fill();
+        dstCtx.strokeStyle = '#fff';
+        dstCtx.lineWidth = 1.5 / dstZoom;
+        dstCtx.stroke();
+      });
+      const wMm = w / dstImgScale * dstScaleX;
+      const hMm = h / dstImgScale * dstScaleY;
+      const labelFont = `bold ${isDraft ? fontSize * 0.9 : fontSize}px "Microsoft YaHei"`;
+      dstCtx.font = labelFont;
+      const textColor = isSelected ? '#00d4ff' : (isDraft ? '#f39c12' : color);
+      dstCtx.fillStyle = textColor;
+      const topMid = { x: (corners[0].x + corners[1].x) / 2, y: (corners[0].y + corners[1].y) / 2 };
+      const nxt = -(corners[1].y - corners[0].y), nyt = corners[1].x - corners[0].x;
+      const ntl = Math.sqrt(nxt ** 2 + nyt ** 2) || 1;
+      const lOffset = 14 / dstZoom;
+      dstCtx.textAlign = 'center';
+      dstCtx.fillText(`${wMm.toFixed(2)}mm`, topMid.x - nxt / ntl * lOffset, topMid.y - nyt / ntl * lOffset);
+      const rightMid = { x: (corners[1].x + corners[2].x) / 2, y: (corners[1].y + corners[2].y) / 2 };
+      const nxr = corners[2].y - corners[1].y, nyr = -(corners[2].x - corners[1].x);
+      const nrl = Math.sqrt(nxr ** 2 + nyr ** 2) || 1;
+      dstCtx.fillText(`${hMm.toFixed(2)}mm`, rightMid.x + nxr / nrl * lOffset, rightMid.y + nyr / nrl * lOffset);
+      // 面积标签 (矩形中心)
+      if (!isDraft) {
+        const areaMm = wMm * hMm;
+        dstCtx.fillStyle = '#2ecc71';
+        dstCtx.fillText(`${areaMm.toFixed(2)}mm²`, cx, cy);
+      }
+      if (!isDraft && (isSelected || Math.abs(r.angle || 0) > 0.1)) {
+        dstCtx.fillStyle = '#f39c12';
+        dstCtx.fillText(`↻${(r.angle||0).toFixed(1)}°`, cx, cy - Math.max(w, h) / 2 - 10 / dstZoom);
+      }
+    }
+    if (rectDraft) drawOneRect(rectDraft, '#f39c12', true, false);
+    rectangles.forEach((r, i) => drawOneRect(r, '#e94560', false, i === selectedRectIdx));
+  }
+
+  // 绘制 (距离和矩形始终可见)
+  drawDistancePoints();
+  drawAllRects();
+
+  dstCtx.restore();
+}
+
+// 查找鼠标附近的孔 (返回 {index, type:'center'|'radius'})
+function hitTestHole(dispX, dispY) {
+  const hitCenter = 8;
+  const hitRing = 6;
+  for (let i = 0; i < holePoints.length; i++) {
+    const h = holePoints[i];
+    const dist = Math.sqrt((dispX - h.x) ** 2 + (dispY - h.y) ** 2);
+    if (dist < hitCenter) return { index: i, type: 'center' };
+    if (Math.abs(dist - h.radius) < hitRing) return { index: i, type: 'radius' };
+  }
+  return null;
+}
+
+// 滚轮缩放 (dst)
+dstCanvasEl.addEventListener('wheel', (e) => {
+  if (!dstImg) return;
+  e.preventDefault();
+  const rect = dstCanvasEl.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const oldDisp = dstCanvasToDisp(mx, my);
+  const oldZoom = dstZoom;
+  dstZoom = Math.max(0.5, Math.min(10, dstZoom * (e.deltaY < 0 ? 1.15 : 0.87)));
+  dstPanX = mx - oldDisp.x * dstZoom;
+  dstPanY = my - oldDisp.y * dstZoom;
+  dstPanWithinBounds();
+  updateDstZoomStatus();
+  drawDst();
+}, { passive: false });
+
+// 鼠标按下: 平移 / 孔交互
+dstCanvasEl.addEventListener('mousedown', (e) => {
+  if (!dstImg) return;
+  const rect = dstCanvasEl.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const disp = dstCanvasToDisp(mx, my);
+
+  // 右键: 删除距离点/矩形; 否则平移
+  if (e.button === 2) {
+    // 距离点删除 (任意模式下均可)
+    const hit = hitTestHole(disp.x, disp.y);
+    if (hit) {
+      e.preventDefault();
+      holePoints.splice(hit.index, 1);
+      drawDst();
+      updateHoleStatus();
+      return;
+    }
+    // 矩形删除 (任意模式下均可)
+    for (let ri = rectangles.length - 1; ri >= 0; ri--) {
+      const r = rectangles[ri];
+      const cx = (r.c1.x + r.c2.x) / 2, cy = (r.c1.y + r.c2.y) / 2;
+      const a = -(r.angle || 0) * Math.PI / 180;
+      const cs = Math.cos(a), sn = Math.sin(a);
+      const lx = (disp.x - cx) * cs - (disp.y - cy) * sn + cx;
+      const ly = (disp.x - cx) * sn + (disp.y - cy) * cs + cy;
+      const minX = Math.min(r.c1.x, r.c2.x), maxX = Math.max(r.c1.x, r.c2.x);
+      const minY = Math.min(r.c1.y, r.c2.y), maxY = Math.max(r.c1.y, r.c2.y);
+      if (lx >= minX && lx <= maxX && ly >= minY && ly <= maxY) {
+        e.preventDefault();
+        rectangles.splice(ri, 1);
+        if (selectedRectIdx >= rectangles.length) selectedRectIdx = rectangles.length - 1;
+        syncSliderToSelected();
+        drawDst();
+        return;
+      }
+    }
+    e.preventDefault();
+    dstIsPanning = true;
+    dstPanStartX = mx - dstPanX;
+    dstPanStartY = my - dstPanY;
+    dstCanvasEl.style.cursor = 'grabbing';
+    return;
+  }
+
+  // 中键平移
+  if (e.button === 1) {
+    e.preventDefault();
+    dstIsPanning = true;
+    dstPanStartX = mx - dstPanX;
+    dstPanStartY = my - dstPanY;
+    dstCanvasEl.style.cursor = 'grabbing';
+    return;
+  }
+
+  // 左键: 拖拽距离点 → 任意模式下均可
+  if (e.button === 0) {
+    const hit = hitTestHole(disp.x, disp.y);
+    if (hit) {
+      holeDragState = { active: true, index: hit.index, type: hit.type };
+      dstCanvasEl.style.cursor = hit.type === 'center' ? 'move' : 'ns-resize';
+      return;
+    }
+  }
+  // 左键: 拖拽矩形角 / 创建新矩形草稿 (仅 rect 模式创建新草稿)
+  if (e.button === 0) {
+    const hitR = 10 / dstZoom;
+    let cornerFound = false;
+    for (let ri = rectangles.length - 1; ri >= 0; ri--) {
+      const r = rectangles[ri];
+      const cx = (r.c1.x + r.c2.x) / 2, cy = (r.c1.y + r.c2.y) / 2;
+      const a = (r.angle || 0) * Math.PI / 180;
+      const cs = Math.cos(a), sn = Math.sin(a);
+      const corners = [
+        { x: cx + (r.c1.x - cx) * cs - (r.c1.y - cy) * sn, y: cy + (r.c1.x - cx) * sn + (r.c1.y - cy) * cs },
+        { x: cx + (r.c2.x - cx) * cs - (r.c1.y - cy) * sn, y: cy + (r.c2.x - cx) * sn + (r.c1.y - cy) * cs },
+        { x: cx + (r.c2.x - cx) * cs - (r.c2.y - cy) * sn, y: cy + (r.c2.x - cx) * sn + (r.c2.y - cy) * cs },
+        { x: cx + (r.c1.x - cx) * cs - (r.c2.y - cy) * sn, y: cy + (r.c1.x - cx) * sn + (r.c2.y - cy) * cs }
+      ];
+      for (let ci = 0; ci < 4; ci++) {
+        if (Math.hypot(disp.x - corners[ci].x, disp.y - corners[ci].y) < hitR) {
+          rectDragTarget = { idx: ri, corner: ci }; cornerFound = true;
+          if (ri !== selectedRectIdx) { selectedRectIdx = ri; syncSliderToSelected(); }
+          break;
+        }
+      }
+      if (cornerFound) break;
+    }
+    if (cornerFound) { dstCanvasEl.style.cursor = 'grabbing'; return; }
+
+    // 未点中角点 → rect 模式下创建草稿, 其他模式不做
+    if (measureMode === 'rect') {
+      let insideRect = false;
+      for (let ri = rectangles.length - 1; ri >= 0; ri--) {
+        const r = rectangles[ri];
+        const cx = (r.c1.x + r.c2.x) / 2, cy = (r.c1.y + r.c2.y) / 2;
+        const a = -(r.angle || 0) * Math.PI / 180;
+        const cs = Math.cos(a), sn = Math.sin(a);
+        const lx = (disp.x - cx) * cs - (disp.y - cy) * sn + cx;
+        const ly = (disp.x - cx) * sn + (disp.y - cy) * cs + cy;
+        const minX = Math.min(r.c1.x, r.c2.x), maxX = Math.max(r.c1.x, r.c2.x);
+        const minY = Math.min(r.c1.y, r.c2.y), maxY = Math.max(r.c1.y, r.c2.y);
+        if (lx >= minX && lx <= maxX && ly >= minY && ly <= maxY) { insideRect = true; break; }
+      }
+      if (!insideRect) {
+        rectDraft = { c1: { x: disp.x, y: disp.y }, c2: { x: disp.x, y: disp.y }, angle: parseFloat(document.getElementById('rectAngle').value) };
+      } else {
+        // 点在矩形内部 → 开始整体移动
+        rectMoveTarget = { idx: selectedRectIdx, ox: disp.x, oy: disp.y };
+        dstCanvasEl.style.cursor = 'grabbing';
+      }
+    } else {
+      // 非 rect 模式下点在矩形内部 → 开始整体移动
+      let moveIdx = -1;
+      for (let ri = rectangles.length - 1; ri >= 0; ri--) {
+        const r = rectangles[ri];
+        const cx = (r.c1.x + r.c2.x) / 2, cy = (r.c1.y + r.c2.y) / 2;
+        const a = -(r.angle || 0) * Math.PI / 180;
+        const cs2 = Math.cos(a), sn2 = Math.sin(a);
+        const lx = (disp.x - cx) * cs2 - (disp.y - cy) * sn2 + cx;
+        const ly = (disp.x - cx) * sn2 + (disp.y - cy) * cs2 + cy;
+        if (lx >= Math.min(r.c1.x, r.c2.x) && lx <= Math.max(r.c1.x, r.c2.x) &&
+            ly >= Math.min(r.c1.y, r.c2.y) && ly <= Math.max(r.c1.y, r.c2.y)) {
+          moveIdx = ri; break;
+        }
+      }
+      if (moveIdx >= 0) {
+        rectMoveTarget = { idx: moveIdx, ox: disp.x, oy: disp.y };
+        selectedRectIdx = moveIdx;
+        syncSliderToSelected();
+        dstCanvasEl.style.cursor = 'grabbing';
+      }
+    }
+  }
+});
+
+dstCanvasEl.addEventListener('contextmenu', (e) => e.preventDefault());
+
+window.addEventListener('mousemove', (e) => {
+  if (!dstImg) return;
+  const rect = dstCanvasEl.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  if (dstIsPanning) {
+    dstPanX = mx - dstPanStartX;
+    dstPanY = my - dstPanStartY;
+    drawDst();
+    return;
+  }
+
+  if (holeDragState.active) {
+    const disp = dstCanvasToDisp(mx, my);
+    disp.x = Math.max(0, Math.min(dstDisplayWidth, disp.x));
+    disp.y = Math.max(0, Math.min(dstDisplayHeight, disp.y));
+    const h = holePoints[holeDragState.index];
+    if (holeDragState.type === 'center') {
+      h.x = disp.x;
+      h.y = disp.y;
+    } else {
+      h.radius = Math.max(5, Math.sqrt((disp.x - h.x) ** 2 + (disp.y - h.y) ** 2));
+    }
+    drawDst();
+    return;
+  }
+
+  // 矩形角点拖拽 / 草稿更新
+  if (rectDragTarget) {
+    const disp = dstCanvasToDisp(mx, my);
+    disp.x = Math.max(0, Math.min(dstDisplayWidth, disp.x));
+    disp.y = Math.max(0, Math.min(dstDisplayHeight, disp.y));
+    const r = rectangles[rectDragTarget.idx];
+    const ci = rectDragTarget.corner;
+    if (ci === 0)      { r.c1.x = disp.x; r.c1.y = disp.y; }
+    else if (ci === 1) { r.c2.x = disp.x; r.c1.y = disp.y; }
+    else if (ci === 2) { r.c2.x = disp.x; r.c2.y = disp.y; }
+    else               { r.c1.x = disp.x; r.c2.y = disp.y; }
+    drawDst();
+    return;
+  }
+  if (rectDraft) {
+    const disp = dstCanvasToDisp(mx, my);
+    disp.x = Math.max(0, Math.min(dstDisplayWidth, disp.x));
+    disp.y = Math.max(0, Math.min(dstDisplayHeight, disp.y));
+    rectDraft.c2.x = disp.x; rectDraft.c2.y = disp.y;
+    drawDst();
+    return;
+  }
+  // 矩形整体移动
+  if (rectMoveTarget) {
+    const disp = dstCanvasToDisp(mx, my);
+    const dx = disp.x - rectMoveTarget.ox;
+    const dy = disp.y - rectMoveTarget.oy;
+    const r = rectangles[rectMoveTarget.idx];
+    r.c1.x = Math.max(0, Math.min(dstDisplayWidth, r.c1.x + dx));
+    r.c1.y = Math.max(0, Math.min(dstDisplayHeight, r.c1.y + dy));
+    r.c2.x = Math.max(0, Math.min(dstDisplayWidth, r.c2.x + dx));
+    r.c2.y = Math.max(0, Math.min(dstDisplayHeight, r.c2.y + dy));
+    rectMoveTarget.ox = disp.x;
+    rectMoveTarget.oy = disp.y;
+    drawDst();
+    return;
+  }
+
+  // 光标样式 (距离点 + 矩形角点 始终可交互)
+  {
+    const disp = dstCanvasToDisp(mx, my);
+    // 距离点光标
+    const hit = hitTestHole(disp.x, disp.y);
+    if (hit) { dstCanvasEl.style.cursor = hit.type === 'center' ? 'move' : 'ns-resize'; return; }
+    // 矩形角点光标
+    const hitR = 10 / dstZoom;
+    for (let ri = rectangles.length - 1; ri >= 0; ri--) {
+      const r = rectangles[ri];
+      const cx = (r.c1.x + r.c2.x) / 2, cy = (r.c1.y + r.c2.y) / 2;
+      const a = (r.angle || 0) * Math.PI / 180;
+      const cs = Math.cos(a), sn = Math.sin(a);
+      const corners = [
+        { x: cx + (r.c1.x - cx) * cs - (r.c1.y - cy) * sn, y: cy + (r.c1.x - cx) * sn + (r.c1.y - cy) * cs },
+        { x: cx + (r.c2.x - cx) * cs - (r.c1.y - cy) * sn, y: cy + (r.c2.x - cx) * sn + (r.c1.y - cy) * cs },
+        { x: cx + (r.c2.x - cx) * cs - (r.c2.y - cy) * sn, y: cy + (r.c2.x - cx) * sn + (r.c2.y - cy) * cs },
+        { x: cx + (r.c1.x - cx) * cs - (r.c2.y - cy) * sn, y: cy + (r.c1.x - cx) * sn + (r.c2.y - cy) * cs }
+      ];
+      if (corners.some(c => Math.hypot(disp.x - c.x, disp.y - c.y) < hitR)) {
+        dstCanvasEl.style.cursor = 'grab'; return;
+      }
+    }
+    dstCanvasEl.style.cursor = 'crosshair';
+  }
+});
+
+window.addEventListener('mouseup', () => {
+  if (dstIsPanning) {
+    dstIsPanning = false;
+    dstCanvasEl.style.cursor = measureMode === 'distance' ? 'crosshair' : 'crosshair';
+  }
+  if (holeDragState.active) {
+    holeDragState = { active: false, index: -1, type: '' };
+    dstCanvasEl.style.cursor = 'crosshair';
+  }
+  if (rectDragTarget) {
+    rectDragTarget = null;
+    dstCanvasEl.style.cursor = 'crosshair';
+  }
+  if (rectMoveTarget) {
+    rectMoveTarget = null;
+    dstCanvasEl.style.cursor = 'crosshair';
+  }
+  // 草稿抬起 → 若拖拽距离 > 3px 则提交为正式矩形
+  if (rectDraft) {
+    const dx = rectDraft.c2.x - rectDraft.c1.x;
+    const dy = rectDraft.c2.y - rectDraft.c1.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      rectDraft.angle = parseFloat(document.getElementById('rectAngle').value);
+      rectangles.push({
+        c1: { x: rectDraft.c1.x, y: rectDraft.c1.y },
+        c2: { x: rectDraft.c2.x, y: rectDraft.c2.y },
+        angle: rectDraft.angle
+      });
+      selectedRectIdx = rectangles.length - 1;
+      syncSliderToSelected();
+    }
+    rectDraft = null;
+    drawDst();
+  }
+});
+
+// 左键点击
+dstCanvasEl.addEventListener('click', (e) => {
+  if (!dstImg) return;
+  if (dstIsPanning) return;
+  if (holeDragState.active) return;
+  const rect = dstCanvasEl.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const disp = dstCanvasToDisp(mx, my);
+  disp.x = Math.max(0, Math.min(dstDisplayWidth, disp.x));
+  disp.y = Math.max(0, Math.min(dstDisplayHeight, disp.y));
+
+  // rect 矩形选中 (任意模式下均可)
+  let clickedIdx = -1;
+  for (let ri = rectangles.length - 1; ri >= 0; ri--) {
+    const r = rectangles[ri];
+    const cx = (r.c1.x + r.c2.x) / 2, cy = (r.c1.y + r.c2.y) / 2;
+    const a = -(r.angle || 0) * Math.PI / 180;
+    const cs = Math.cos(a), sn = Math.sin(a);
+    const lx = (disp.x - cx) * cs - (disp.y - cy) * sn + cx;
+    const ly = (disp.x - cx) * sn + (disp.y - cy) * cs + cy;
+    const minX = Math.min(r.c1.x, r.c2.x) - 3, maxX = Math.max(r.c1.x, r.c2.x) + 3;
+    const minY = Math.min(r.c1.y, r.c2.y) - 3, maxY = Math.max(r.c1.y, r.c2.y) + 3;
+    if (lx >= minX && lx <= maxX && ly >= minY && ly <= maxY) {
+      clickedIdx = ri; break;
+    }
+  }
+  if (clickedIdx >= 0 && clickedIdx !== selectedRectIdx) {
+    selectedRectIdx = clickedIdx;
+    syncSliderToSelected();
+    drawDst();
+    return;
+  }
+  if (clickedIdx < 0 && selectedRectIdx >= 0) {
+    selectedRectIdx = -1;
+    document.getElementById('rectAngle').value = 0;
+    document.getElementById('rectAngleNum').value = '0.0';
+    drawDst();
+  }
+  // 如果不在 rect 模式且未点中矩形, 不取消选中
+
+  if (measureMode === 'distance') {
+    // 检查点击是否在已有矩形内部或距离点附近 (避免冲突)
+    let inRect = false;
+    for (const r of rectangles) {
+      const cx = (r.c1.x + r.c2.x) / 2, cy = (r.c1.y + r.c2.y) / 2;
+      const a = -(r.angle || 0) * Math.PI / 180;
+      const cs = Math.cos(a), sn = Math.sin(a);
+      const lx = (disp.x - cx) * cs - (disp.y - cy) * sn + cx;
+      const ly = (disp.x - cx) * sn + (disp.y - cy) * cs + cy;
+      if (lx >= Math.min(r.c1.x, r.c2.x) && lx <= Math.max(r.c1.x, r.c2.x) &&
+          ly >= Math.min(r.c1.y, r.c2.y) && ly <= Math.max(r.c1.y, r.c2.y)) { inRect = true; break; }
+    }
+    if (inRect || hitTestHole(disp.x, disp.y)) return;
+    holePoints.push({ x: disp.x, y: disp.y, radius: 25 });
+    drawDst();
+    updateHoleStatus();
+    return;
+  }
+
+  if (measureMode === 'rect') return; // rect 拖拽创建由 mousedown/move/up 处理
+});
+
+function onRectAngleChange() {
+  const ang = parseFloat(document.getElementById('rectAngle').value);
+  document.getElementById('rectAngleNum').value = ang.toFixed(1);
+  if (selectedRectIdx >= 0 && selectedRectIdx < rectangles.length) {
+    rectangles[selectedRectIdx].angle = ang;
+    drawDst();
+  }
+}
+
+function onRectAngleNumChange() {
+  let ang = parseFloat(document.getElementById('rectAngleNum').value);
+  if (isNaN(ang)) ang = 0;
+  ang = Math.max(-180, Math.min(180, ang));
+  document.getElementById('rectAngle').value = ang;
+  document.getElementById('rectAngleNum').value = ang.toFixed(1);
+  if (selectedRectIdx >= 0 && selectedRectIdx < rectangles.length) {
+    rectangles[selectedRectIdx].angle = ang;
+    drawDst();
+  }
+}
+
+function syncSliderToSelected() {
+  if (selectedRectIdx >= 0 && selectedRectIdx < rectangles.length) {
+    const ang = rectangles[selectedRectIdx].angle || 0;
+    document.getElementById('rectAngle').value = ang;
+    document.getElementById('rectAngleNum').value = ang.toFixed(1);
+  } else {
+    document.getElementById('rectAngle').value = 0;
+    document.getElementById('rectAngleNum').value = '0.0';
+  }
+}
+
+function updateHoleStatus() {
+  document.getElementById('measureStatus').textContent =
+    holePoints.length > 0 ? `已标记 ${holePoints.length} 个点` : '等待标记点位';
+  hideResult();
+}
+
+function setMeasureMode(mode) {
+  measureMode = mode;
+  dstCanvasEl.style.cursor = 'crosshair';
+  document.getElementById('btnDistance').style.background = mode === 'distance' ? '#e94560' : '#533483';
+  document.getElementById('btnRect').style.background = mode === 'rect' ? '#e94560' : '#533483';
+  document.getElementById('rectControls').style.display = (mode === 'rect') ? 'flex' : 'none';
+  if (mode === 'rect') {
+    document.getElementById('measureInstruction').textContent = '拖拽绘制矩形区域，点击矩形内部选中，拖动角度滑杆旋转  |  滚轮缩放 · 右键拖拽平移';
+    document.getElementById('measureStatus').textContent = '矩形测量模式';
+  } else {
+    document.getElementById('measureInstruction').textContent = '点击标记点位，拖拽圆心移动/拖拽圆边调整孔径，右键删除  |  滚轮缩放 · 右键拖拽平移';
+    document.getElementById('measureStatus').textContent = '距离测量模式';
+  }
+  hideResult();
+  drawDst();
+}
+
+function clearMeasure() {
+  measurePoints = [];
+  holePoints = [];
+  holeDragState = { active: false, index: -1, type: '' };
+  rectangles = [];
+  rectDraft = null;
+  rectDragTarget = null;
+  rectMoveTarget = null;
+  selectedRectIdx = -1;
+  document.getElementById('rectAngle').value = 0;
+  document.getElementById('rectAngleNum').value = '0.0';
+  drawDst();
+  hideResult();
+  if (measureMode === 'rect') {
+    document.getElementById('measureInstruction').textContent = '拖拽绘制矩形区域  |  滚轮缩放 · 右键拖拽平移';
+    document.getElementById('measureStatus').textContent = '矩形已清除';
+  } else {
+    document.getElementById('measureInstruction').textContent = '点击标记点位  |  滚轮缩放 · 右键拖拽平移';
+    document.getElementById('measureStatus').textContent = '点位已清除';
+  }
+}
+
+function exportImage() {
+  if (!dstImg) return;
+  const link = document.createElement('a');
+  link.download = '尺寸测量_' + new Date().toISOString().slice(0, 19).replace(/:/g, '-') + '.png';
+  link.href = dstCanvasEl.toDataURL('image/png');
+  link.click();
+}
+
+function hideResult() {
+  document.getElementById('resultBox').classList.remove('show');
+}
+
+function backToUpload() {
+  dstImg = null;
+  dstScaleX = 0;
+  dstScaleY = 0;
+  dstZoom = 1;
+  dstPanX = 0;
+  dstPanY = 0;
+  measurePoints = [];
+  holePoints = [];
+  holeDragState = { active: false, index: -1, type: '' };
+  rectangles = [];
+  rectDraft = null;
+  rectDragTarget = null;
+  rectMoveTarget = null;
+  selectedRectIdx = -1;
+  document.getElementById('rightPlaceholder').style.display = 'block';
+  dstCanvasEl.style.display = 'none';
+  document.getElementById('measureControls').style.display = 'none';
+  document.getElementById('rectControls').style.display = 'none';
+  document.getElementById('dstZoomBar').style.display = 'none';
+  hideResult();
+  document.getElementById('measureStatus').textContent = '等待矫正...';
+  document.getElementById('measureInstruction').textContent = '';
+}
+
+window.addEventListener('resize', () => {
+  if (srcImg) {
+    const oldScale = srcImgScale;
+    initSrcCanvas();
+    const scaleRatio = srcImgScale / oldScale;
+    srcPoints.forEach(p => { p.x *= scaleRatio; p.y *= scaleRatio; });
+    drawSrc();
+  }
+  if (dstImg) {
+    const oldScale = dstImgScale;
+    initDstCanvas();
+    const scaleRatio = dstImgScale / oldScale;
+    measurePoints.forEach(p => { p.x *= scaleRatio; p.y *= scaleRatio; });
+    holePoints.forEach(h => { h.x *= scaleRatio; h.y *= scaleRatio; h.radius *= scaleRatio; });
+    rectangles.forEach(r => { r.c1.x *= scaleRatio; r.c1.y *= scaleRatio; r.c2.x *= scaleRatio; r.c2.y *= scaleRatio; });
+    if (rectDraft) { rectDraft.c1.x *= scaleRatio; rectDraft.c1.y *= scaleRatio; rectDraft.c2.x *= scaleRatio; rectDraft.c2.y *= scaleRatio; }
+    drawDst();
+  }
+});
+</script>
+
+</body>
+</html>
